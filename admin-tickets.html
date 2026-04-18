@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý vé - Admin</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="admin-dashboard.html" class="logo">🚌 BusTicket Admin</a>
+            <ul class="nav-links">
+                <li><a href="admin-dashboard.html">Dashboard</a></li>
+                <li><a href="admin-routes.html">Tuyến đường</a></li>
+                <li><a href="admin-buses.html">Xe</a></li>
+                <li><a href="admin-schedules.html">Lịch trình</a></li>
+                <li><a href="admin-tickets.html">Vé</a></li>
+                <li><a href="admin-reports.html">Báo cáo</a></li>
+                <li><a onclick="logout()" style="cursor: pointer;">Đăng xuất</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h1>Quản lý vé</h1>
+
+        <div class="admin-form" style="margin-bottom: 30px; display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end;">
+            <div class="form-group">
+                <label>Trạng thái vé</label>
+                <select id="statusFilter">
+                    <option value="">Tất cả</option>
+                    <option value="paid">Đã thanh toán</option>
+                    <option value="unpaid">Chưa thanh toán</option>
+                    <option value="used">Đã sử dụng</option>
+                    <option value="cancelled">Đã hủy</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Tìm theo hành khách</label>
+                <input type="text" id="searchText" placeholder="Tên hoặc email">
+            </div>
+            <button class="btn-primary" onclick="loadTickets()">Lọc</button>
+        </div>
+
+        <div id="ticketTable"></div>
+    </div>
+
+    <script src="db.js"></script>
+    <script src="auth.js"></script>
+    <script src="utils.js"></script>
+    <script>
+        if (!checkAdminAuth()) exit;
+
+        function loadTickets() {
+            const status = document.getElementById('statusFilter').value;
+            const searchText = document.getElementById('searchText').value.toLowerCase();
+            let tickets = status ? db.getTickets('status', status) : db.getTickets();
+
+            if (searchText) {
+                tickets = tickets.filter(ticket => {
+                    return ticket.passengerName.toLowerCase().includes(searchText) ||
+                           (ticket.email || '').toLowerCase().includes(searchText);
+                });
+            }
+
+            if (tickets.length === 0) {
+                document.getElementById('ticketTable').innerHTML = '<p>Không tìm thấy vé phù hợp.</p>';
+                return;
+            }
+
+            let html = '<table class="table"><thead><tr><th>ID Vé</th><th>Hành khách</th><th>Email</th><th>Điện thoại</th><th>Chuyến</th><th>Ngày</th><th>Ghế</th><th>Giá</th><th>Trạng thái</th><th>Hành động</th></tr></thead><tbody>';
+
+            tickets.forEach(ticket => {
+                const schedule = db.getSchedules().find(s => String(s.id) === String(ticket.scheduleId));
+                const route = schedule ? db.getRoutes().find(r => r.id === schedule.routeId) : null;
+                const routeName = route ? route.name : 'N/A';
+                html += `
+                    <tr>
+                        <td>${ticket.id}</td>
+                        <td>${ticket.passengerName}</td>
+                        <td>${ticket.email || 'N/A'}</td>
+                        <td>${ticket.passengerPhone}</td>
+                        <td>${routeName}</td>
+                        <td>${schedule ? schedule.date : 'N/A'}</td>
+                        <td>${ticket.seatNumber}</td>
+                        <td>${formatCurrency(ticket.price)}</td>
+                        <td><span class="badge badge-${ticket.status}">${ticket.status}</span></td>
+                        <td>
+                            <button class="btn-small" onclick="updateTicketStatus('${ticket.id}','used')">Đã sử dụng</button>
+                            <button class="btn-small btn-secondary" onclick="updateTicketStatus('${ticket.id}','cancelled')">Hủy</button>
+                            <a href="ticket-detail.html?id=${ticket.id}" class="btn-small">Chi tiết</a>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            document.getElementById('ticketTable').innerHTML = html;
+        }
+
+        function updateTicketStatus(ticketId, status) {
+            db.updateTicketStatus(ticketId, status);
+            showNotification('Cập nhật trạng thái vé thành công');
+            loadTickets();
+        }
+
+        loadTickets();
+    </script>
+</body>
+</html>

@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Bus Ticket Management</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="admin-dashboard.html" class="logo">🚌 BusTicket Admin</a>
+            <ul class="nav-links">
+                <li><a href="admin-dashboard.html">Dashboard</a></li>
+                <li><a href="admin-routes.html">Tuyến đường</a></li>
+                <li><a href="admin-buses.html">Xe</a></li>
+                <li><a href="admin-schedules.html">Lịch trình</a></li>
+                <li><a href="admin-tickets.html">Vé</a></li>
+                <li><a href="admin-reports.html">Báo cáo</a></li>
+                <li><a onclick="logout()" style="cursor: pointer;">Đăng xuất</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h1>Admin Dashboard</h1>
+
+        <div class="stats-grid">
+            <div class="stat-box">
+                <h3>💳 Doanh thu</h3>
+                <p class="stat-value" id="totalRevenue">0đ</p>
+                <p class="stat-label">Tháng này</p>
+            </div>
+            <div class="stat-box">
+                <h3>🎫 Vé bán</h3>
+                <p class="stat-value" id="totalTickets">0</p>
+                <p class="stat-label">Tổng cộng</p>
+            </div>
+            <div class="stat-box">
+                <h3>🚌 Chuyến đi</h3>
+                <p class="stat-value" id="totalSchedules">0</p>
+                <p class="stat-label">Đang hoạt động</p>
+            </div>
+            <div class="stat-box">
+                <h3>👥 Khách hàng</h3>
+                <p class="stat-value" id="totalCustomers">0</p>
+                <p class="stat-label">Đã đăng ký</p>
+            </div>
+        </div>
+
+        <div style="margin-top: 40px;">
+            <h2>Biểu đồ & hiệu suất</h2>
+            <div class="charts-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; margin-top: 20px;">
+                <div class="chart-card" style="background: white; padding: 24px; border-radius: 12px; box-shadow: var(--shadow-sm);">
+                    <h3>Doanh thu theo ngày</h3>
+                    <canvas id="revenueChart" width="400" height="260"></canvas>
+                </div>
+                <div class="chart-card" style="background: white; padding: 24px; border-radius: 12px; box-shadow: var(--shadow-sm);">
+                    <h3>Trạng thái vé</h3>
+                    <canvas id="ticketStatusChart" width="400" height="260"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div style="margin-top: 40px;">
+            <h2>Bản đồ điều hành</h2>
+            <div class="admin-menu">
+                <a href="admin-routes.html" class="admin-menu-item">
+                    <h3>📍 Quản lý tuyến đường</h3>
+                    <p>Thêm, sửa, xóa tuyến đường</p>
+                </a>
+                <a href="admin-buses.html" class="admin-menu-item">
+                    <h3>🚐 Quản lý xe</h3>
+                    <p>Quản lý thông tin xe buýt</p>
+                </a>
+                <a href="admin-schedules.html" class="admin-menu-item">
+                    <h3>📅 Quản lý lịch trình</h3>
+                    <p>Tạo và quản lý lịch đi của xe</p>
+                </a>
+                <a href="admin-tickets.html" class="admin-menu-item">
+                    <h3>🎫 Quản lý vé</h3>
+                    <p>Xem và cập nhật trạng thái vé</p>
+                </a>
+                <a href="admin-reports.html" class="admin-menu-item">
+                    <h3>📊 Báo cáo & thống kê</h3>
+                    <p>Xem doanh thu, thống kê bán vé</p>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script src="db.js"></script>
+    <script src="auth.js"></script>
+    <script src="utils.js"></script>
+    <script>
+        if (!checkAdminAuth()) exit;
+
+        // Load statistics
+        const stats = db.getRevenueStats();
+        document.getElementById('totalRevenue').textContent = formatCurrency(stats.totalRevenue);
+        document.getElementById('totalTickets').textContent = db.getTickets().length;
+        document.getElementById('totalSchedules').textContent = db.getSchedules().length;
+        
+        const users = JSON.parse(localStorage.getItem('users'));
+        const customers = users.filter(u => u.role === 'customer');
+        document.getElementById('totalCustomers').textContent = customers.length;
+
+        renderAdminCharts();
+
+        function renderAdminCharts() {
+            const transactions = JSON.parse(localStorage.getItem('transactions')) || [];
+            const tickets = db.getTickets();
+
+            const revenueByDay = {};
+            transactions.forEach(tx => {
+                const dateKey = tx.timestamp.split(' ')[0];
+                revenueByDay[dateKey] = (revenueByDay[dateKey] || 0) + tx.amount;
+            });
+
+            const revenueLabels = Object.keys(revenueByDay).sort();
+            const revenueValues = revenueLabels.map(label => revenueByDay[label]);
+            drawLineChart('revenueChart', revenueLabels, revenueValues, '#4f46e5');
+
+            const statusCounts = tickets.reduce((acc, ticket) => {
+                acc[ticket.status] = (acc[ticket.status] || 0) + 1;
+                return acc;
+            }, {});
+
+            const statusLabels = ['paid', 'unpaid', 'used', 'cancelled'];
+            const ticketValues = statusLabels.map(status => statusCounts[status] || 0);
+            drawBarChart('ticketStatusChart', statusLabels.map(label => label.toUpperCase()), ticketValues, '#16a34a');
+        }
+
+        function drawLineChart(canvasId, labels, values, color) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            const padding = 40;
+            ctx.clearRect(0, 0, width, height);
+
+            if (labels.length === 0) {
+                ctx.fillStyle = '#444';
+                ctx.fillText('Không có dữ liệu doanh thu', padding, height / 2);
+                return;
+            }
+
+            const maxValue = Math.max(...values, 1);
+            const xStep = (width - padding * 2) / Math.max(labels.length - 1, 1);
+            const yScale = (height - padding * 2) / maxValue;
+
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+
+            values.forEach((value, index) => {
+                const x = padding + index * xStep;
+                const y = height - padding - value * yScale;
+                if (index === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(x, y, 4, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            ctx.stroke();
+
+            ctx.fillStyle = '#444';
+            ctx.font = '12px Arial';
+            labels.forEach((label, index) => {
+                const x = padding + index * xStep;
+                ctx.fillText(label, x - 18, height - padding + 20);
+            });
+
+            ctx.textAlign = 'right';
+            ctx.fillText(formatCurrency(maxValue), width - padding, padding);
+        }
+
+        function drawBarChart(canvasId, labels, values, color) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            const padding = 40;
+            ctx.clearRect(0, 0, width, height);
+
+            const maxValue = Math.max(...values, 1);
+            const barWidth = (width - padding * 2) / values.length * 0.7;
+
+            labels.forEach((label, index) => {
+                const x = padding + index * ((width - padding * 2) / values.length) + barWidth * 0.15;
+                const barHeight = (height - padding * 2) * (values[index] / maxValue);
+                ctx.fillStyle = color;
+                ctx.fillRect(x, height - padding - barHeight, barWidth, barHeight);
+                ctx.fillStyle = '#444';
+                ctx.fillText(values[index], x + barWidth / 2 - 10, height - padding - barHeight - 8);
+                ctx.fillText(label, x + barWidth / 2 - 10, height - padding + 16);
+            });
+        }
+    </script>
+</body>
+</html>
