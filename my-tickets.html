@@ -103,8 +103,12 @@
                 loadTickets();
             }
         }
-
         loadTickets();
+window.addEventListener('storage', function(e) {
+    if (e.key === 'tickets') {
+        loadTickets();
+    }
+});
     </script>
 </body>
 </html>

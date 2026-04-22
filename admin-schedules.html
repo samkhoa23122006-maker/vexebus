@@ -64,6 +64,12 @@
                         <input type="time" id="scheduleArrivalTime" required>
                     </div>
                 </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Giá vé (VND)</label>
+                        <input type="number" id="schedulePrice" min="0" required>
+                    </div>
+                </div>
                 <button type="submit" class="btn-primary">Thêm lịch trình</button>
             </form>
         </div>
@@ -114,7 +120,7 @@
 
         function loadSchedules() {
             const schedules = db.getSchedules();
-            let html = '<table class="table"><thead><tr><th>Tuyến</th><th>Xe</th><th>Ngày</th><th>Giờ xuất/đến</th><th>Trạng thái</th><th>Hành động</th></tr></thead><tbody>';
+            let html = '<table class="table"><thead><tr><th>Tuyến</th><th>Xe</th><th>Ngày</th><th>Giờ xuất/đến</th><th>Giá vé</th><th>Trạng thái</th><th>Hành động</th></tr></thead><tbody>';
             
             schedules.forEach(schedule => {
                 const route = routes.find(r => r.id === schedule.routeId);
@@ -126,6 +132,7 @@
                         <td>${bus.type} - ${bus.licensePlate}</td>
                         <td>${schedule.date}</td>
                         <td>${schedule.departureTime} / ${schedule.arrivalTime}</td>
+                        <td>${schedule.price ? schedule.price.toLocaleString('vi-VN') + ' VND' : 'N/A'}</td>
                         <td><span class="badge badge-${schedule.status}">${schedule.status}</span></td>
                         <td>
                             <button onclick="deleteSchedule(${schedule.id})" class="btn-small btn-danger">Xóa</button>
@@ -157,8 +164,9 @@
             const date = document.getElementById('scheduleDate').value;
             const departureTime = document.getElementById('scheduleDepartureTime').value;
             const arrivalTime = document.getElementById('scheduleArrivalTime').value;
+            const price = parseInt(document.getElementById('schedulePrice').value);
 
-            db.addSchedule(routeId, busId, driverId, date, departureTime, arrivalTime);
+            db.addSchedule(routeId, busId, driverId, date, departureTime, arrivalTime, price);
             showNotification('Lịch trình đã được thêm');
             this.reset();
             loadSchedules();

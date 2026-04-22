@@ -113,6 +113,11 @@
             html += '</tbody></table>';
             recentTicketsDiv.innerHTML = html;
         }
+window.addEventListener('storage', function(e) {
+    if (e.key === 'tickets') {
+        location.reload();
+    }
+});
     </script>
 </body>
 </html>
