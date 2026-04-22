@@ -113,9 +113,9 @@ class Database {
         return routeId ? schedules.filter(s => s.routeId === routeId) : schedules;
     }
 
-    addSchedule(routeId, busId, driverId, date, departureTime, arrivalTime) {
+    addSchedule(routeId, busId, driverId, date, departureTime, arrivalTime, price) {
         const schedules = JSON.parse(localStorage.getItem('schedules'));
-        const newSchedule = { id: Date.now(), routeId, busId, driverId, date, departureTime, arrivalTime, status: 'scheduled' };
+        const newSchedule = { id: Date.now(), routeId, busId, driverId, date, departureTime, arrivalTime, status: 'scheduled', price: price };
         schedules.push(newSchedule);
         localStorage.setItem('schedules', JSON.stringify(schedules));
         return newSchedule;
@@ -124,6 +124,18 @@ class Database {
     // Ticket Methods
     bookTicket(scheduleId, passengerName, passengerEmail, passengerPhone, seatNumber, price) {
         const tickets = JSON.parse(localStorage.getItem('tickets'));
+        
+        // Check if seat is already booked for this schedule
+        const existingBooking = tickets.find(t => 
+            t.scheduleId === scheduleId && 
+            t.seatNumber === seatNumber && 
+            t.status !== 'cancelled'
+        );
+        
+        if (existingBooking) {
+            return { success: false, message: 'Ghế này đã được đặt!' };
+        }
+        
         const qrCode = 'QR-' + Date.now();
         const newTicket = {
             id: Date.now(),

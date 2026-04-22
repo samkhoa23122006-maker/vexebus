@@ -107,6 +107,20 @@
                 </div>
                 <div class="form-group">
                     <label>Chọn ghế</label>
+                    <div class="seat-legend">
+                        <div class="legend-item">
+                            <div class="seat available" style="width: 20px; height: 20px; margin-right: 5px;"></div>
+                            <span>Còn trống</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="seat selected" style="width: 20px; height: 20px; margin-right: 5px;"></div>
+                            <span>Đã chọn</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="seat booked" style="width: 20px; height: 20px; margin-right: 5px;"></div>
+                            <span>Đã đặt</span>
+                        </div>
+                    </div>
                     <div id="seatMap" class="seat-map"></div>
                 </div>
                 <div class="form-group">
@@ -287,7 +301,7 @@
                                 <strong>Điểm khởi hành:</strong> ${schedule.route.startPoint}
                             </div>
                             <div class="detail-item">
-                                <strong>Điểm dừa:</strong> ${schedule.route.endPoint}
+                                <strong>Điểm đến:</strong> ${schedule.route.endPoint}
                             </div>
                         </div>
 
@@ -344,22 +358,63 @@
             document.getElementById('passengerName').value = user.name;
             document.getElementById('passengerPhone').value = user.phone;
 
-            // Generate seat map
+            // Generate seat map with bus layout
             const schedule = allSchedules.find(s => s.id === scheduleId);
             const bookedSeats = db.getTickets()
                 .filter(t => t.scheduleId === scheduleId && t.status !== 'cancelled')
                 .map(t => t.seatNumber);
 
-            let seatHtml = '';
-            for (let i = 1; i <= schedule.bus.capacity; i++) {
-                const isBooked = bookedSeats.includes(i.toString());
-                seatHtml += `
-                    <div class="seat ${isBooked ? 'booked' : 'available'} ${selectedSeat === i ? 'selected' : ''}" 
-                         onclick="${isBooked ? '' : `selectSeat(${i}, ${price})`}">
-                        ${i}
-                    </div>
-                `;
+            let seatHtml = '<div class="bus-layout">';
+            seatHtml += '<div class="bus-front">🚍 Front of Bus</div>';
+            
+            // Create rows of seats (4 seats per row: 2 left, 2 right with aisle)
+            const seatsPerRow = 4;
+            const numRows = Math.ceil(schedule.bus.capacity / seatsPerRow);
+            
+            for (let row = 0; row < numRows; row++) {
+                seatHtml += '<div class="seat-row">';
+                
+                // Left side seats
+                for (let col = 0; col < 2; col++) {
+                    const seatNum = row * seatsPerRow + col + 1;
+                    if (seatNum <= schedule.bus.capacity) {
+                        const isBooked = bookedSeats.includes(seatNum);
+                        seatHtml += `
+                            <div class="seat ${isBooked ? 'booked' : 'available'} ${selectedSeat === seatNum ? 'selected' : ''}" 
+                                 ${isBooked ? 'disabled' : `onclick="selectSeat(${seatNum}, ${price})"`}
+                                 data-seat="${seatNum}"
+                                 title="Seat ${seatNum}">
+                                ${seatNum}
+                            </div>
+                        `;
+                    }
+                }
+                
+                // Aisle
+                seatHtml += '<div class="aisle"></div>';
+                
+                // Right side seats
+                for (let col = 2; col < 4; col++) {
+                    const seatNum = row * seatsPerRow + col + 1;
+                    if (seatNum <= schedule.bus.capacity) {
+                        const isBooked = bookedSeats.includes(seatNum);
+                        seatHtml += `
+                            <div class="seat ${isBooked ? 'booked' : 'available'} ${selectedSeat === seatNum ? 'selected' : ''}" 
+                                 ${isBooked ? 'disabled' : `onclick="selectSeat(${seatNum}, ${price})"`}
+                                 data-seat="${seatNum}"
+                                 title="Seat ${seatNum}">
+                                ${seatNum}
+                            </div>
+                        `;
+                    }
+                }
+                
+                seatHtml += '</div>';
             }
+            
+            seatHtml += '<div class="bus-back">🚪 Exit</div>';
+            seatHtml += '</div>';
+            
             document.getElementById('seatMap').innerHTML = seatHtml;
             
             // Scroll to booking form
@@ -371,13 +426,11 @@
             const seats = document.querySelectorAll('.seat');
             seats.forEach(seat => seat.classList.remove('selected'));
             
-            // Find and select the seat
-            const seatElements = document.querySelectorAll('.seat');
-            seatElements.forEach((seat, index) => {
-                if (index + 1 === seatNumber) {
-                    seat.classList.add('selected');
-                }
-            });
+            // Find and select the seat by data-seat attribute
+            const targetSeat = document.querySelector(`.seat[data-seat="${seatNumber}"]`);
+            if (targetSeat) {
+                targetSeat.classList.add('selected');
+            }
             
             document.getElementById('totalPrice').innerHTML = `
                 <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -404,9 +457,19 @@
             const passengerPhone = document.getElementById('passengerPhone').value;
             const paymentMethod = document.getElementById('paymentMethod').value;
 
-            // Book ticket
-            const ticket = db.bookTicket(selectedSchedule, passengerName, user.email, passengerPhone, selectedSeat, selectedSchedulePrice);
+            if (!paymentMethod) {
+                showNotification('Vui lòng chọn phương thức thanh toán', 'error');
+                return;
+            }
 
+            // Book ticket
+            const ticket = db.bookTicket(selectedSchedule, passengerName, user.email, passengerPhone, selectedSeat, selectedSchedulePrice);            
+            if (ticket.success === false) {
+                showNotification(ticket.message, 'error');
+                // Refresh seat map in case it changed
+                selectTrip(selectedSchedule, selectedSchedulePrice);
+                return;
+            }
             // Add payment transaction
             if (paymentMethod === 'cash') {
                 ticket.status = 'unpaid';
@@ -415,12 +478,51 @@
                 ticket.status = 'paid';
                 db.updateTicketStatus(ticket.id, 'paid');
             }
-
-            showNotification('Đặt vé thành công!');
+            // Update seat map to show booked seat immediately
+            const bookedSeat = document.querySelector(`.seat[data-seat="${selectedSeat}"]`);
+            if (bookedSeat) {
+                bookedSeat.classList.remove('selected', 'available');
+                bookedSeat.classList.add('booked');
+                bookedSeat.onclick = null;
+                bookedSeat.style.cursor = 'not-allowed';
+            }
+                        showNotification('Đặt vé thành công! Đang chuyển hướng...', 'success');
             setTimeout(() => {
                 window.location.href = `ticket-detail.html?id=${ticket.id}`;
             }, 1500);
         });
+
+        window.addEventListener('storage', function(e) {
+            if (e.key === 'schedules' || e.key === 'buses' || e.key === 'routes' || e.key === 'tickets') {
+                if (allSchedules.length > 0) {
+                    performSearch(); // Re-run search to update results
+                }
+                // If booking section is visible, update seat map
+                if (document.getElementById('bookingSection').style.display !== 'none' && selectedSchedule) {
+                    selectTrip(selectedSchedule, selectedSchedulePrice);
+                }
+            }
+        });
     </script>
 </body>
-</html>
+</html>/ / 
+ 
+ L i s t e n 
+ 
+ f o r 
+ 
+ s t o r a g e 
+ 
+ c h a n g e s 
+ 
+ t o 
+ 
+ u p d a t e 
+ 
+ d a t a 
+ 
+ i n 
+ 
+ r e a l - t i m e 
+ 
+ 
